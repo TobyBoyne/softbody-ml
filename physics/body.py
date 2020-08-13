@@ -12,6 +12,9 @@ D = 1
 # physics consts
 dt = 0.01
 k = 10
+eta = 10
+
+# TODO: add force due to viscosity
 
 def cartesian(grid_pos):
 	return np.dot(grid_pos, D * DISTS)
@@ -26,6 +29,9 @@ class Body:
 	def __init__(self, R):
 		self.R = R
 		self.particles, self.connections = self.create_particles()
+
+		# centre stores the (x, y) coordinates of the centre particle
+		self.centre = np.array([0., 0.])
 
 		self.velocities = np.zeros_like(self.particles)
 		self.forces = np.zeros_like(self.particles)
@@ -78,13 +84,14 @@ class Body:
 		return pos, connections
 
 	def apply_forces(self):
+		force = 10 * np.array([-1., 1.])
 		with tqdm(range(2000)) as tqdm_iter:
 			for _ in tqdm_iter:
-				self.calc_forces()
+				self.calc_forces(force)
 				self.step()
 
 
-	def calc_forces(self):
+	def calc_forces(self, force=0):
 		# get direction vectors for all forces (N, 2, 6)
 		stacked_particles = np.expand_dims(self.particles, axis=1).repeat(6, axis=1)
 		dir_vecs = self.particles[self.connections] - stacked_particles
@@ -96,11 +103,18 @@ class Body:
 		forces = k * (1 - D / amplitudes) * dir_vecs
 		self.forces = forces.sum(axis=1)
 
-		self.forces[-1] += 10 * np.array([-1., 1.])
+		self.forces[-1] += force
+
+
 
 	def step(self):
 		self.velocities += self.forces * dt
 		self.particles += self.velocities * dt
+
+		centre = self.particles[0]
+		self.centre += centre
+		self.particles -= centre
+
 
 
 	def draw(self):
@@ -122,4 +136,4 @@ class Body:
 
 
 if __name__ == "__main__":
-	body = Body(10)
+	body = Body(8)
