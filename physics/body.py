@@ -7,6 +7,8 @@ U = np.array([1, 0])
 ROT = 0.5 * np.array([[1, - np.sqrt(3)], [np.sqrt(3), 1]])
 DISTS = np.array([np.dot(ROT,U), np.dot(ROT@ROT, U)])
 
+WALL = np.array([4, 0])
+
 D = 1
 
 # physics consts
@@ -15,6 +17,7 @@ k = 10
 eta = 10
 
 # TODO: add force due to viscosity
+# sort outer by clockwise direciton
 
 def cartesian(grid_pos):
 	return np.dot(grid_pos, D * DISTS)
@@ -28,21 +31,26 @@ def hex_grid_distance(grid_pos):
 class Body:
 	def __init__(self, R):
 		self.R = R
-		self.particles, self.connections = self.create_particles()
+		self.particles, self.connections, self.outer = self.create_particles()
 
 		# centre stores the (x, y) coordinates of the centre particle
 		self.centre = np.array([0., 0.])
 
 		self.velocities = np.zeros_like(self.particles)
 		self.forces = np.zeros_like(self.particles)
-		self.apply_forces()
 
+	def run(self):
+		self.calculate_forces()
 		self.draw()
 
 	def create_particles(self):
 		"""Create a hex grid of particles"""
 		sub_moves = np.array([[1, 0], [0, 1], [1, -1]])
 		moves = np.concatenate((sub_moves, -sub_moves))
+
+		# outer stores the indices of the particles on the outside of the body
+		# defined as particles that have fewer than 6 neighbours
+		outer = []
 
 		grid_to_idx = {(0, 0): 0}
 		cur_parts = [0]
@@ -77,21 +85,36 @@ class Body:
 		for i, con in enumerate(connections):
 			while len(con) < 6:
 				con.append(i)
+				if i not in outer:
+					outer.append(i)
 		connections = np.array(connections)
 
 		grid_pos = np.array(particles)
 		pos = cartesian(grid_pos)
-		return pos, connections
+		return pos, connections, outer
 
-	def apply_forces(self):
-		force = 10 * np.array([-1., 1.])
-		with tqdm(range(2000)) as tqdm_iter:
+	def calculate_forces(self):
+		with tqdm(range(5000)) as tqdm_iter:
 			for _ in tqdm_iter:
-				self.calc_forces(force)
+				internal = self.internal_forces()
+				applied = self.applied_forces(WALL)
+				self.forces = internal + applied
 				self.step()
 
+	def applied_forces(self, perp):
+		"""Applies a force based on wall where `perp` is the perpendicular vector to the wall"""
+		d = np.linalg.norm(perp)
+		dists = np.dot(self.particles, perp)
+		# no force is applied to particles not on the other side of the wall
+		dists *= (dists > d)
 
-	def calc_forces(self, force=0):
+		# wall stiffness = 0.015
+		forces = -0.015 * perp.reshape((-1, 1)) @ dists.reshape((1, -1))
+		return forces.T
+
+
+
+	def internal_forces(self):
 		# get direction vectors for all forces (N, 2, 6)
 		stacked_particles = np.expand_dims(self.particles, axis=1).repeat(6, axis=1)
 		dir_vecs = self.particles[self.connections] - stacked_particles
@@ -101,9 +124,7 @@ class Body:
 		# set zero amplitudes to 1, avoid divide-by-zero errors
 		amplitudes[np.nonzero(amplitudes == 0)] = 1.
 		forces = k * (1 - D / amplitudes) * dir_vecs
-		self.forces = forces.sum(axis=1)
-
-		self.forces[-1] += force
+		return forces.sum(axis=1)
 
 
 
@@ -125,6 +146,10 @@ class Body:
 			circle = plt.Circle(p, D/2, color='b')
 			ax.add_artist(circle)
 
+		v = 100 * np.array([-WALL[1], WALL[0]])
+		points = np.array([WALL + v, WALL - v])
+		ax.plot(points[:, 0], points[:, 1])
+
 
 		# last = self.particles[-1]
 		# circle = plt.Circle(tuple(last.pos), D / 3, color='r')
@@ -137,3 +162,4 @@ class Body:
 
 if __name__ == "__main__":
 	body = Body(8)
+	body.run()
