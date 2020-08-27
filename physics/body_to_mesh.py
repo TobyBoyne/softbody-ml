@@ -1,20 +1,55 @@
 from physics.body import Body
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 import numpy as np
 
-# from scipy.spatial import ConvexHull
+NUM_POINTS = 20
 
-NUM_POINTS = 30
+# unit_vec = np.array([0, 1])
+# t = 2 * np.pi / NUM_POINTS
+# rot_matrix = np.array([[np.cos(t), -np.sin(t)], [np.sin(t), np.cos(t)]])
+# rays = np.zeros((NUM_POINTS, 2))
+#
+# for i in range(NUM_POINTS):
+# 	rays[i, :]  = unit_vec
+# 	unit_vec = np.dot(rot_matrix, unit_vec)
+#
+#
+#
+# def get_mesh(body: Body):
+# 	outer_points = body.particles[body.outer]
+# 	for ray in rays:
+
+
+"""Find the points that make up the circular mesh"""
+def get_angles(points):
+	return np.arctan2(points[:, 0], points[:, 1])
 
 def get_mesh(body: Body):
-	points = body.particles[body.outer]
-	return points
+	"""Return indexes of evenly spaces particles on the outside of the body"""
+	outer_points = body.particles[body.outer]
+	# points = np.sort(outer_points, key=get_angle)
+	angles = get_angles(outer_points)
+	points = body.outer[np.argsort(angles)]
+	print(len(outer_points))
+	idxs = np.linspace(0, len(points)-1, NUM_POINTS, dtype=np.int)
+	return points[idxs]
+
+
+
 
 
 
 if __name__ == "__main__":
 	b = Body(8)
-	b.run()
+	# b.run()
+	# x = np.array([-1, 1])
+	# print(get_angles(x))
 	mesh = get_mesh(b)
-	plt.plot(mesh[:, 0], mesh[:, 1], 'o')
+	pts = b.particles[mesh]
+	poly = Polygon(pts, closed=True)
+	fig, ax = plt.subplots()
+	ax.set_xlim((-10, 10))
+	ax.set_ylim((-10, 10))
+	ax.add_artist(poly)
 	plt.show()
