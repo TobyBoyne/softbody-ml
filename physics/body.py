@@ -1,13 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Polygon
 from time import perf_counter
 from tqdm import tqdm
 
 U = np.array([1, 0])
 ROT = 0.5 * np.array([[1, - np.sqrt(3)], [np.sqrt(3), 1]])
 DISTS = np.array([np.dot(ROT,U), np.dot(ROT@ROT, U)])
-
-WALL = np.array([4, 0])
 
 D = 1
 
@@ -17,7 +16,7 @@ k = 10
 eta = 10
 
 # TODO: add force due to viscosity
-# sort outer by clockwise direciton
+# sort outer by clockwise direction
 
 def cartesian(grid_pos):
 	return np.dot(grid_pos, D * DISTS)
@@ -31,7 +30,8 @@ def hex_grid_distance(grid_pos):
 class Body:
 	def __init__(self, R):
 		self.R = R
-		self.particles, self.connections, self.outer = self.create_particles()
+		self.particles, self.connections, outer = self.create_particles()
+		self.outer = self.sort_outer(outer)
 
 		# centre stores the (x, y) coordinates of the centre particle
 		self.centre = np.array([0., 0.])
@@ -88,16 +88,27 @@ class Body:
 				if i not in outer:
 					outer.append(i)
 		connections = np.array(connections)
+		outer = np.array(outer)
 
 		grid_pos = np.array(particles)
 		pos = cartesian(grid_pos)
 		return pos, connections, outer
 
-	def calculate_forces(self):
-		with tqdm(range(5000)) as tqdm_iter:
+	def sort_outer(self, outer):
+		def get_angles(points):
+			return np.arctan2(points[:, 0], points[:, 1])
+
+		outer_points = self.particles[outer]
+		angles = get_angles(outer_points)
+		sorted_outer = outer[np.argsort(angles)]
+		return sorted_outer
+
+
+	def calculate_forces(self, wall_perp):
+		with tqdm(range(100)) as tqdm_iter:
 			for _ in tqdm_iter:
 				internal = self.internal_forces()
-				applied = self.applied_forces(WALL)
+				applied = self.applied_forces(wall_perp)
 				self.forces = internal + applied
 				self.step()
 
@@ -138,23 +149,14 @@ class Body:
 
 
 
-	def draw(self):
-		fig, ax = plt.subplots(figsize=(8, 8))
+	def draw(self, fig=None, ax=None):
+		if fig is None and ax is None:
+			fig, ax = plt.subplots(figsize=(8, 8))
 		ax.set_xlim((-10, 10))
 		ax.set_ylim((-10, 10))
 		for p in self.particles:
-			circle = plt.Circle(p, D/2, color='b')
+			circle = plt.Circle(p, D/5, color='b')
 			ax.add_artist(circle)
-
-		v = 100 * np.array([-WALL[1], WALL[0]])
-		points = np.array([WALL + v, WALL - v])
-		ax.plot(points[:, 0], points[:, 1])
-
-
-		# last = self.particles[-1]
-		# circle = plt.Circle(tuple(last.pos), D / 3, color='r')
-		# ax.add_artist(circle)
-		plt.show()
 
 
 

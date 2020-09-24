@@ -22,32 +22,33 @@ NUM_POINTS = 20
 # 	for ray in rays:
 
 
-"""Find the points that make up the circular mesh"""
-def get_angles(points):
-	return np.arctan2(points[:, 0], points[:, 1])
-
 def get_mesh(body: Body):
 	"""Return indexes of evenly spaces particles on the outside of the body"""
-	outer_points = body.particles[body.outer]
-	# points = np.sort(outer_points, key=get_angle)
-	angles = get_angles(outer_points)
-	points = body.outer[np.argsort(angles)]
-	idxs = np.linspace(0, len(points)-1, NUM_POINTS, dtype=np.int)
-	return points[idxs]
+	return body.outer
+
+
+def points_to_grid(points: np.ndarray, grid_radius):
+	"""Convert a set of points (vertices of a polygon) to a mask"""
+	SCALE = 1
+	RES = 0.5
+	size = grid_radius * SCALE + 1
+	ygrid, xgrid = np.mgrid[-size:size:RES, -size:size:RES]
+	xypix = np.vstack((xgrid.ravel(), ygrid.ravel())).T
+
+	poly = Polygon(points, closed=True)
+	mask = poly.contains_points(xypix)
+	return mask.reshape(ygrid.shape)
 
 
 def body_to_grid(body: Body):
 	"""Find a polygon that encloses the shape, then """
-	SCALE = 1
-	RES = 0.5
-	size = body.R * SCALE + 1
-	ygrid, xgrid = np.mgrid[-size:size:RES, -size:size:RES]
-	xypix = np.vstack((xgrid.ravel(), ygrid.ravel())).T
-
 	mesh = get_mesh(body)
-	poly = Polygon(b.particles[mesh], closed=True)
-	mask = poly.contains_points(xypix)
+	points = body.particles[mesh]
+	mask = points_to_grid(points, body.R)
 
+	plt.imshow(mask)
+	plt.show()
+	return mask
 
 
 if __name__ == "__main__":
@@ -55,21 +56,3 @@ if __name__ == "__main__":
 	b = Body(8)
 
 	grid = body_to_grid(b)
-
-
-
-	# plt.show()
-
-
-	# b = Body(8)
-	# # b.run()
-	# # x = np.array([-1, 1])
-	# # print(get_angles(x))
-	# mesh = get_mesh(b)
-	# pts = b.particles[mesh]
-	# poly = Polygon(pts, closed=True)
-	# fig, ax = plt.subplots()
-	# ax.set_xlim((-10, 10))
-	# ax.set_ylim((-10, 10))
-	# ax.add_artist(poly)
-	# plt.show()
