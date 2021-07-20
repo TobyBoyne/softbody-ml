@@ -5,31 +5,10 @@ import numpy as np
 from matplotlib.patches import Polygon
 import matplotlib.pyplot as plt
 
-from physics.body import Body
+import physics.body
 
 
-# TODO: convert more complex shapes into wall triangles
-# speed up intersections using numpy methods
-
-PAIRS = np.array([[0, 1], [1, 2], [2, 0]])
-
-def lines_intersect(L1, L2):
-	"""Returns whether two lines intersect
-	For use in wall.outward_vector to ensure that particle moves towards rest of body
-	Currently not being used"""
-	(x1, y1), (x2, y2) = L1
-	(x3, y3), (x4, y4) = L2
-
-	denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-	if denom == 0:
-		return False
-	t = (x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)
-	t /= denom
-
-	u = - ((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3))
-	u /= denom
-	return 0 <= t <= 1 and 0 <= u <= 1
-
+# TODO: speed up by using numpy methods
 
 def point_to_line(p, L):
 	"""Returns the shortest vector from a point p to a line L"""
@@ -41,25 +20,55 @@ def point_to_line(p, L):
 	vec = (a - p) - ((a - p) @ n) * n
 	return vec
 
+class WallGroup:
+	def __init__(self, *wall_pts):
+		self.walls = [Wall(pts) for pts in wall_pts]
+		self.history = []
+
+	def record_history(self):
+		histories = [wall.pts.copy() for wall in self.walls]
+		self.history.append(histories)
+
+	def move(self, move_vec):
+		for wall in self.walls:
+			wall.move(move_vec)
+
+	def get_forces(self, body: 'physics.body.Body'):
+		forces = []
+		for wall in self.walls:
+			forces.append(wall.get_forces(body))
+
+		return np.sum(forces, axis=0)
+
+
 class Wall:
-	K = 10
+	K = 1000
 	def __init__(self, pts: np.ndarray):
-		self.pts = pts # pts is a (3x2) array
-		self.polygon = Polygon(pts, closed=True)
+		self.pts = pts # pts is a (Nx2) array
+		self.polygon = Polygon(pts, closed=True, color='grey')
+		self.pairs = self.get_pairs()
+
+	def get_pairs(self):
+		first = np.arange(self.pts.shape[0])
+		second = np.roll(first, -1)
+		pairs = np.stack((first, second), axis=-1)
+		return pairs
+
+	def move(self, move_vec):
+		self.pts += move_vec
+		self.polygon.xy = self.pts
 
 	def contains_points(self, points):
 		transform = self.polygon.get_transform()
 		trans_points = transform.transform(points)
 		return self.polygon.contains_points(trans_points)
 
-	def outward_vector(self, body: Body):
-		"""Find which wall is between the particle and the centre of the body
-		Then return the vector perpendicular to that wall"""
+	def get_forces(self, body: 'physics.body.Body'):
+		"""Find the forces exerted by the wall on all of the particles in the body"""
 		is_inside = self.contains_points(body.particles)
 		force_arr = np.zeros_like(body.particles)
 		if not is_inside.any():
 			# if no particles are inside the wall, return
-			print("HMM")
 			return force_arr
 		idxs = np.where(is_inside)
 		points = body.particles[idxs]
@@ -67,7 +76,7 @@ class Wall:
 		for i, point in zip(idxs[0], points):
 			centre_line = np.stack((point, body.centre), axis=-1)
 			vec = None
-			for line in self.pts[PAIRS]:
+			for line in self.pts[self.pairs]:
 				# if lines_intersect(centre_line, line):
 				new_vec = point_to_line(point, line)
 				if vec is None or 0 < np.linalg.norm(new_vec) < np.linalg.norm(vec):
@@ -83,19 +92,17 @@ class Wall:
 
 
 
-
-
 if __name__ == '__main__':
-	b = Body(8)
+	b = physics.body.Body(8)
 	wall_vertices = np.array([[-1., 3.], [0., -10.], [-10., -10.]])
 	wall = Wall(wall_vertices)
-
+	wall.move(np.array([4., -5.]))
 	fig,ax = plt.subplots(figsize=(8, 8))
 
 	wall.draw(ax)
 	b.draw(fig, ax)
 
-	forces = wall.outward_vector(b)
+	forces = wall.get_forces(b)
 
 
 

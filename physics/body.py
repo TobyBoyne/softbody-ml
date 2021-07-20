@@ -4,6 +4,8 @@ from matplotlib.patches import Polygon
 from time import perf_counter
 from tqdm import tqdm
 
+from physics import wall
+
 U = np.array([1, 0])
 ROT = 0.5 * np.array([[1, - np.sqrt(3)], [np.sqrt(3), 1]])
 DISTS = np.array([np.dot(ROT,U), np.dot(ROT@ROT, U)])
@@ -11,9 +13,15 @@ DISTS = np.array([np.dot(ROT,U), np.dot(ROT@ROT, U)])
 D = 1
 
 # physics consts
-dt = 0.01
+anim_dt = 1/30
 k = 10
 eta = 10
+phys_per_dt = 50 # number of physics calculations per animation time-step
+dt = anim_dt / phys_per_dt
+
+
+wall_points = np.array([[-10., 10.], [-10., -10.], [-15., -10.], [-15., 10.]])
+WALL_GROUP = wall.WallGroup(wall_points)
 
 # TODO: add force due to viscosity
 # sort outer by clockwise direction
@@ -38,6 +46,7 @@ class Body:
 
 		self.velocities = np.zeros_like(self.particles)
 		self.forces = np.zeros_like(self.particles)
+		self.history = []
 
 	def run(self):
 		self.calculate_forces()
@@ -104,25 +113,27 @@ class Body:
 		return sorted_outer
 
 
-	def calculate_forces(self, wall_perp):
-		with tqdm(range(100)) as tqdm_iter:
-			for _ in tqdm_iter:
+	def calculate_forces(self):
+		t = 10 # seconds
+		N = int(t / dt)
+		with tqdm(range(N)) as tqdm_iter:
+			for i in tqdm_iter:
 				internal = self.internal_forces()
-				applied = self.applied_forces(wall_perp)
+				applied = self.applied_forces()
+				WALL_GROUP.move(np.array([1., 0.]) * dt)
 				self.forces = internal + applied
 				self.step()
+				# if points_sum := WALL_GROUP.walls[0].contains_points(self.particles).sum():
+				# 	# print(points_sum)
+				# 	pass
+				if i % phys_per_dt == 0:
+					self.history.append(self.particles.copy())
+					WALL_GROUP.record_history()
 
-	def applied_forces(self, perp):
-		"""Applies a force based on wall where `perp` is the perpendicular vector to the wall"""
-		d = np.linalg.norm(perp)
-		dists = np.dot(self.particles, perp)
-		# no force is applied to particles not on the other side of the wall
-		dists *= (dists > d)
-
-		# wall stiffness = 0.015
-		forces = -0.015 * perp.reshape((-1, 1)) @ dists.reshape((1, -1))
-		return forces.T
-
+	def applied_forces(self):
+		"""Applies a force based on all walls"""
+		total_forces = WALL_GROUP.get_forces(self)
+		return total_forces
 
 
 	def internal_forces(self):
@@ -143,9 +154,9 @@ class Body:
 		self.velocities += self.forces * dt
 		self.particles += self.velocities * dt
 
-		centre = self.particles[0]
-		self.centre += centre
-		self.particles -= centre
+		# centre = self.particles[0]
+		# self.centre += centre
+		# self.particles -= centre
 
 
 
@@ -154,14 +165,16 @@ class Body:
 			fig, ax = plt.subplots(figsize=(8, 8))
 		ax.set_xlim((-10, 10))
 		ax.set_ylim((-10, 10))
+
+		for wall in WALL_GROUP.walls:
+			ax.add_artist(wall.polygon)
+
 		for p in self.particles:
 			circle = plt.Circle(p, D/5, color='b')
 			ax.add_artist(circle)
 
 
-
-
-
 if __name__ == "__main__":
 	body = Body(8)
 	body.run()
+	plt.show()

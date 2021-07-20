@@ -3,9 +3,7 @@ import torch
 from tqdm import tqdm
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import Polygon
 
-from physics.body import Body
 from physics.body_to_mesh import points_to_grid
 
 from learning.autoencoder.network import Net
@@ -21,7 +19,7 @@ if __name__ == '__main__':
 		unit = np.array([1, 0])
 		t = np.linspace(0, 2 * np.pi, 50)
 		for i in tqdm_iter:
-			noise = np.sin(10*t)
+			noise = np.random.random() * np.sin(5*t) + np.random.random() * 0.5 * np.sin(9*t)
 			radii = np.expand_dims(R + noise, axis=-1)
 
 			rot = np.array([[np.cos(t), -np.sin(t)],
